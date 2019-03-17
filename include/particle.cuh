@@ -11,24 +11,28 @@
 |               
 */
 
+#include <vector>
+#include <cuda.h>
+
 class Particle{
     private:
-        float4 pos; //(x, y, z, w)  w = mass
+        float3 pos; //(x, y, z)
         float3 vel; //(x, y, z)
-        float3 force; //(x, y, z)
+        int charge;
+        float dt = 0.001;
+        float mu_0 = 1e-7; //mu_0 = (4*PI)e-7 and biot savart divides bu_0 by 4*PI... (Newt/Amps^2)
 
     public:
         //Default Constructor
-        Particle(float4, float3, float3);
+        Particle(float3, float3, int c = 1);
         ~Particle();
-        //setter functions
-        __inline__ __device__ void setPosition(float4 p);
-        __inline__ __device__ void setVelocity(float3 v);
-        __inline__ __device__ void setForce(float3 f);
 
         //getter functions
-        __inline__ __device__ float4 getPosition();
-        __inline__ __device__ float3 getVelocity();
-        __inline__ __device__ float3 getForce();
+        float3 getPosition();
+        float3 getVelocity();
+        void getB(std::vector<std::vector<float3> > & vertices);
 
+        void move();
 };
+
+

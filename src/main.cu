@@ -5,7 +5,7 @@
 #include "../include/particle.cuh"
 #include "../include/blender_object.cuh"
 
-#define N 100
+#define N 1
 
 #define BLOCK 256
 
@@ -26,15 +26,18 @@
 //Globals
 int window;
 float3 color = {1.0, 1.0, 1.0};
+float3 *particle_ptr;
 
 //------------------------------//
 //    Creates charged particles   
 //------------------------------//
 void particleInit(){
-	
+	particle_ptr = new float3[N];
 	printf("\nNumber of particles = %d \n", N);
 
 }
+
+void simulate(BlenderOBJ & obj){}
 
 //-----------------------------//
 //    Destroys any remaining
@@ -42,13 +45,14 @@ void particleInit(){
 //-----------------------------//
 void cleanUp(){ 
 	glutDestroyWindow(window);
+	delete particle_ptr;
 	std::cout<<"cleaned"<<std::endl;
 }
 
 //---------------------------//
 //    Displays the Particles   
 //---------------------------//
-void draw_picture(BlenderOBJ obj){
+void draw_picture(BlenderOBJ& obj){
 	std::vector<std::vector<float3> > vertices = obj.getVertices();
 
 	glClear(GL_COLOR_BUFFER_BIT);
@@ -71,9 +75,9 @@ void draw_picture(BlenderOBJ obj){
 void control(){	
 	const std::string path = TOKAMAK_PATH;
 	BlenderOBJ T(path, "Tokamak");
-	particleInit();
+	
 	draw_picture(T);
-    //n_body();
+    simulate(T);
     //draw_picture();
 	
 	std::cout<<"DONE, press SPACE then ENTER to exit"<<std::endl;
