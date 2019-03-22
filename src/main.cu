@@ -24,11 +24,11 @@
 
 #define TOKAMAK_PATH "./objects/OBJ_tokamak.obj"
 
-/*--------------------
+/*-------------------------------------
 |   TO DO:
 |       1. Contniue "simulate" function
 |			- getForces
---------------------*/
+--------------------------------------*/
 
 
 //Globals
@@ -41,7 +41,7 @@ float3 vel = make_float3(0.0,0.0,0.0);
 //global arrays
 std::vector<float3> obj_glob; //vertices contain separator for shapes
 std::vector<float4> p_glob; //particles + mass
-std::vector<float3> v_glob;
+std::vector<float3> v_glob; //remove (69-74)
 std::vector<float4> p_gpu0, p_gpu1;
 
 //for devices
@@ -111,16 +111,10 @@ void simulate(){
 	int tdraw = 0;
 	
 	while(t<STOP_TIME){
-		for(int v=1;v<obj_glob.size();v++){
-			if(obj_glob[v].x == SHAPE_SEPARATOR.x)
-				continue;
-			else
-				std::cout<<obj_glob[v-1].x<<obj_glob[v].x<<std::endl;
-		}
-		//particle.getB(vertices[0]);
+		//particle.getB(obj_glob);
 		//particle.move();
-		if(tdraw == DRAW-9){
-			draw_picture();
+		if(tdraw == DRAW){
+			//draw_picture();
 			tdraw = 0;
 		}
 		tdraw++;
