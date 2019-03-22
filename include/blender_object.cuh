@@ -7,40 +7,48 @@
 |
 ---------------------------------------------------*/
 
-/*---------------------------------------------------
-| Class: BlenderOBJ
-| Description: Creates a blender object for render
-| Variables:
-|	1. path - File path to read
-|	2. vector<vector float3> name 
-|		- Similar to an ID
-|	3. vector<vector float3> vertices 
-|		- Stores vertex points, diff shapes
-|	4. vector<vector float2> uvs 
-|		- coordinates of 2D wrap onto 3D object, diff shapes
-|	5. normals - coordinates for normals, diff shapes
-|		- name.z for indexing vectors
-| Function:
-| 	1. loadOBJ - reads the file (used in constructor)
----------------------------------------------------*/
 #include <iostream>
-#include <vector>
-#include <string>
-#include <map>
+#include <fstream>
+#include <limits>
+#include <cuda.h>
+#include "blender_object.cuh"
 
-class BlenderOBJ {
-	private:
-		const std::string path;
-		std::string name;
-		std::map<std::string,int> id;
-		std::vector<std::vector<float3> > vertices;
-		std::vector<std::vector<float3> > normals;
-		std::vector<std::vector<float2> > uvs;
+/*--------------------
+|   TO DO:
+|       1. Parse uv and normal data
+--------------------*/
 
-		bool loadOBJ(const std::string);
-	public:
-		BlenderOBJ(const std::string, std::string);
-		void setName(std::string);
-		std::vector<std::vector<float3> > getVertices();
-		~BlenderOBJ();
-};
+bool loadOBJ(const std::string path, std::vector<float3> &vertices, float3 SHAPE_SEPARATOR){
+    std::ifstream obj_read(path);
+
+    std::string ID;
+    int v_line = 0;
+	float3 v;
+
+    if(obj_read.fail()){
+        std::cout << "Cannot read file " << path <<".\nTerminating...\n";
+        return false;
+    }
+    
+    while(!obj_read.eof()){
+		obj_read >> ID;
+		
+        //Header
+        if(ID == "#"){
+			//skipline
+            obj_read.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        }
+        //Object
+        if(ID == "o"){
+            vertices.push_back(SHAPE_SEPARATOR);
+        }
+
+        //Vertices
+        else if(ID == "v"){
+            v = {0.0,0.0,0.0};
+            obj_read >> v.x >> v.y >> v.z;
+            vertices.push_back(v);
+        }
+    }
+    return true;
+}

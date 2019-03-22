@@ -1,6 +1,6 @@
 #include <iostream>
 #include "particle.cuh"
-#include "vec_helpers.hpp"
+#include "vec_helpers.cuh"
 
 
 /*-------------------------------
@@ -16,38 +16,36 @@ float3 Particle::getPosition(){ return pos; }
 
 float3 Particle::getVelocity(){ return vel; }
 
-void Particle::getB(std::vector<std::vector<float3> > & vertices){
-    float3 B, cross, dl; //B (magnetic field) force
-    float tol = 0.001f;
+void Particle::getB(std::vector<float3> vertices){
+    float3 B, crossv, dl; //B (magnetic field) force
+
     float distance;
     float BSLscalar = mu_0;
-    //iterate through vectors //start one vector ahead
-    std::vector<float3>::iterator prev_pt;
-    for (auto shape: vertices){
-        prev_pt = shape.begin();
-        for(std::vector<float3>::iterator now_pt = shape.begin()+1; now_pt!= shape.end(); ++now_pt){
-            //calculate distance
-            float3 r = makeVector(*prev_pt, pos);
-            distance = length(r);
-            //distance is 3m
-            if(abs(distance-3.0f)<tol){
-                dl = makeVector(*prev_pt, *now_pt);
-                float3 unit_r = normalize(r);
-                cross = vectCross(dl, unit_r);
+    int size_vect = vertices.size();
+    for (int i = 1; i<size_vect; i++){
 
-                BSLscalar /= distance*distance;
-                B.x += BSLscalar*cross.x;
-                B.y += BSLscalar*cross.y;        
-                B.z += BSLscalar*cross.z;
+        std::cout<<"in second loop";
+        float3 now_pt = vertices[i%size_vect];
+        float3 prev_pt = vertices[i-1%size_vect];
+        //calculate distance
+        float3 r = makeVector(prev_pt, pos);
+        distance = length(r);
+        //distance is 3m
 
-                BSLscalar *= distance*distance; //undoes the division
-            }
-            *prev_pt = *now_pt; //move along the wire section
+        dl = makeVector(prev_pt, now_pt);
+        float3 unit_r = unit(r);
+        crossv = cross(dl, unit_r);
+        std::cout<<crossv.x<<std::endl;
+        BSLscalar /= distance*distance;
+        B.x += BSLscalar*crossv.x;
+        B.y += BSLscalar*crossv.y;        
+        B.z += BSLscalar*crossv.z;
+
+        BSLscalar *= distance*distance; //undoes the division
         }
-    }
 
 
-    float3 old_vel = vectCross(vel, B);    
+    float3 old_vel = cross(vel, B);    
     vel.x = charge*old_vel.x*dt;
     vel.y = charge*old_vel.y*dt;
     vel.z = charge*old_vel.z*dt;

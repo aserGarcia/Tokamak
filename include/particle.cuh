@@ -30,7 +30,7 @@ class Particle{
         //getter functions
         float3 getPosition();
         float3 getVelocity();
-        void getB(std::vector<std::vector<float3> > & vertices);
+        void getB(std::vector<float3> vertices);
 
         void move();
 };
