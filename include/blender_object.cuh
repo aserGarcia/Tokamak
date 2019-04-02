@@ -18,14 +18,12 @@
 |       1. Parse uv and normal data
 --------------------*/
 
-bool loadOBJ(const std::string path, std::vector<float3> &vertices, float3 SHAPE_SEPARATOR){
+bool loadOBJ(const std::string path, std::vector<int>&obj_indx, std::vector<float3> &vertices){
     std::ifstream obj_read(path);
 
     std::string ID;
     float3 v;
-    float line = 0;
-    std::vector<float>cnts;
-
+    int line = 0;
     if(obj_read.fail()){
         std::cout << "Cannot read file " << path <<".\nTerminating...\n";
         return false;
@@ -43,7 +41,7 @@ bool loadOBJ(const std::string path, std::vector<float3> &vertices, float3 SHAPE
 
         //Shape
         if(ID == "o"){
-            cnts.push_back(line);
+            obj_indx.push_back(line);
         }
 
         //Vertices
@@ -53,10 +51,6 @@ bool loadOBJ(const std::string path, std::vector<float3> &vertices, float3 SHAPE
             vertices.push_back(v);
         }
     }
-    //inserting shape vector lengths
-    for(int i=1; i<cnts.size(); i++){
-        SHAPE_SEPARATOR.y = cnts[i]-cnts[i-1];
-        vertices.insert(vertices.begin()+cnts[i-1], SHAPE_SEPARATOR);
-    }
+    
     return true;
 }

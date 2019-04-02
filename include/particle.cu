@@ -9,44 +9,51 @@ float3 Particle::getPosition(){ return pos; }
 float3 Particle::getVelocity(){ return vel; }
 
 //magnetic force calculation
-void Particle::getB(std::vector<float3> vertices, float3 SHAPE_SEPARATOR){
-    float3 B, crossv, dl; //B (magnetic field) force
+void Particle::getB(std::vector<float3> vertices, std::vector<int>obj_indx){
+    float3 B, crossv, dl, rv; //B (magnetic field) force
 
     float r;
-    float mu_0;
+    int k = 1;
     for (int i = 1; i<vertices.size(); i++){
-        if(vertices[i].x != SHAPE_SEPARATOR.x){
-            float3 now_pt = vertices[i];
-            float3 prev_pt = vertices[i-1];
-            //calculate distance
-            float3 rv = makeVector(prev_pt, pos);
-            r = length(rv);
-            //distance is 3m
-            dl = makeVector(prev_pt, now_pt);
-            float3 unit_r = unit(rv);
-            crossv = cross(dl, unit_r);
+        /* (if-else) Since all the shapes are in the same vector
+        | with no separation, there is a vector of indices
+        | that separates the shapes.
+        */
 
-            mu_0 /= r*r;
-        
-            scale(mu_0, crossv);
-            B.x += crossv.x;
-            B.y += crossv.y;        
-            B.z += crossv.z;
-
-            mu_0 *= r*r; //undoes the division
+        if(i == obj_indx[k]){ 
+            dl = makeVector(vertices[i],vertices[obj_indx[k-1]]);
+            rv = makeVector(vertices[i], pos);
+            i++;
+            k++;
         }
+        else{
+            rv = makeVector(vertices[i], pos);
+            dl = makeVector(vertices[i-1],vertices[i]);
+        }
+
+        r = length(rv);
+
+        float3 unit_r = unit(rv);
+        crossv = cross(dl, unit_r);
+
+        scale(mu_0/r*r, crossv);
+        B.x += crossv.x;
+        B.y += crossv.y;        
+        B.z += crossv.z;
+
     }
 
-    float3 old_vel = cross(vel, B);
-    scale(charge*dt, old_vel);    
-    vel.x = old_vel.x;
-    vel.y = old_vel.y;
-    vel.z = old_vel.z;
+    float3 new_vel = cross(vel, B);
+    scale(charge*dt, new_vel);    
+    vel = new_vel;
 }
 
 void Particle::move(){
-    pos.x = vel.x*dt;
-    pos.y = vel.y*dt;
-    pos.z = vel.z*dt;
+    std::cout<<"vel";
+    printVector(vel);
+    scale(dt, vel);
+    std::cout<<"scaled vel";
+    printVector(vel);
+    pos = vel;
 }
 

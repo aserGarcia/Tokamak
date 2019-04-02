@@ -31,19 +31,17 @@
 --------------------------------------*/
 
 
-//Globals
-float3 SHAPE_SEPARATOR = {1234.0f, 0.0f, 0.0f};
-
 int window;
 float3 color = {1.0, 1.0, 1.0};
 float3 vel = make_float3(0.0,0.0,0.0);
 
 //global arrays
 std::vector<float3> obj_glob; //vertices contain separator for shapes
+std::vector<int> obj_indx;
 std::vector<float4> p_glob; //particles + mass
 std::vector<float3> v_glob; //remove (69-74)
 std::vector<float4> p_gpu0, p_gpu1;
-
+Particle p({2.0f,0.0f,1.0f},{1.0f,1.0f,1.0f});
 //for devices
 struct DeviceStruct {
 	int deviceID;
@@ -60,12 +58,13 @@ struct DeviceStruct {
 void particleInit(){
 	std::default_random_engine generator;
 	std::uniform_real_distribution<float> distribution(0.0,1.0);
-
+/*
 	p_glob.resize(N_PARTICLES);
 	for(auto &p: p_glob){
-		p = make_float4(2.0f, 0.0f,1.0f, 1.0f);
+		 = make_float4(2.0f, 0.0f,1.0f, 1.0f);
 	}
-
+*/
+	
 	v_glob.resize(N_PARTICLES);
 	for(auto &v: v_glob){
 		v.x = distribution(generator);
@@ -84,10 +83,7 @@ void draw_object(){
 	glBegin(GL_POINTS);
 	glColor3f(color.x, color.y, color.z);
 	for(auto &vertex:obj_glob){
-		if(vertex.x == SHAPE_SEPARATOR.x)
-			continue;
-		else
-			glVertex3f(vertex.x,vertex.y,vertex.z);
+		glVertex3f(vertex.x,vertex.y,vertex.z);
 	}
 	glEnd();
 	glutSwapBuffers();
@@ -109,17 +105,26 @@ void draw_picture(){
 void simulate(){
 	float t = 0.0;
 	int tdraw = 0;
-	
-	while(t<STOP_TIME){
-		//particle.getB(obj_glob);
-		//particle.move();
-		if(tdraw == DRAW){
-			//draw_picture();
-			tdraw = 0;
-		}
-		tdraw++;
-		t += DT;
-	}
+	p.getB(obj_glob, obj_indx);
+	p.move();
+	float3 pos = p.getPosition();
+	std::cout<<pos.x<<" "<<pos.y<<" "<<pos.z<<std::endl;
+	p.getB(obj_glob, obj_indx);
+	p.move();
+	pos = p.getPosition();
+	std::cout<<pos.x<<" "<<pos.y<<" "<<pos.z<<std::endl;
+	// while(t<STOP_TIME){
+	// 	p.getB(obj_glob, obj_indx);
+	// 	p.move();
+	// 	pos = p.getPosition();
+	// 	std::cout<<pos.x<<" "<<pos.y<<" "<<pos.z<<std::endl;
+	// 	if(tdraw == DRAW){
+	// 		draw_picture();
+	// 		tdraw = 0;
+	// 	}
+	// 	tdraw++;
+	// 	t += DT;
+	// }
 	std::cout<<"-----------FINISHED SIMULATING-----------\n";
 }
 
@@ -128,7 +133,7 @@ void simulate(){
 //---------------------------------//
 void control(){	
 	const std::string path = TOKAMAK_PATH;
-	bool loaded = loadOBJ(path, obj_glob, SHAPE_SEPARATOR);
+	bool loaded = loadOBJ(path, obj_indx, obj_glob);
 	if(!loaded){
 		std::cout<<"Could not load object, exiting\n";
 		exit(1);
