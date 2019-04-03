@@ -1,7 +1,8 @@
 #include <cuda.h>
 #include <iostream>
+#include <string>
 
-float3 makeVector(float3 &point1, float3 &point2){
+float3 makeVector(float3 point1, float3 point2){
     return make_float3(point2.x-point1.x, point2.y-point1.y, point2.z-point1.z);
 }
 
@@ -11,19 +12,19 @@ void scale(float s, float3 &v){
     v.z *= s;
 }
 
-float length(float3 &v){
+float length(float3 v){
     return sqrtf(v.x*v.x+v.y*v.y+v.z*v.z);
 }
 
-float3 unit(float3 &v){
+float3 unit(float3 v){
     float magV = length(v);
     return make_float3(v.x/magV, v.y/magV, v.z/magV);
 }
 
-float3 cross(float3 &v1, float3 &v2){
+float3 cross(float3 v1, float3 v2){
     return make_float3(v1.y*v2.z-v1.z*v2.y, v1.z*v2.x-v1.x*v2.z, v1.x*v2.y-v1.y*v2.x);
 }
 
-__inline__ void printVector(float3 &v){
-    std::cout<<v.x<<" "<<v.y<<" "<<v.z<<std::endl;
+__inline__ void printVector(float3 v, std::string name){
+    std::cout<<name<<" "<<v.x<<" "<<v.y<<" "<<v.z<<std::endl;
 }

@@ -26,8 +26,7 @@
 
 /*-------------------------------------
 |   TO DO:
-|       1. Contniue "simulate" function
-|			- getForces
+|       1. Change to cuda C...
 --------------------------------------*/
 
 
@@ -41,7 +40,7 @@ std::vector<int> obj_indx;
 std::vector<float4> p_glob; //particles + mass
 std::vector<float3> v_glob; //remove (69-74)
 std::vector<float4> p_gpu0, p_gpu1;
-Particle p({2.0f,0.0f,1.0f},{1.0f,1.0f,1.0f});
+Particle p({2.0f,1.0f,1.0f},{1.0f,1.0f,1.0f});
 //for devices
 struct DeviceStruct {
 	int deviceID;
@@ -103,16 +102,12 @@ void draw_picture(){
 }
 
 void simulate(){
-	float t = 0.0;
-	int tdraw = 0;
+	// float t = 0.0;
+	// int tdraw = 0;
 	p.getB(obj_glob, obj_indx);
 	p.move();
-	float3 pos = p.getPosition();
-	std::cout<<pos.x<<" "<<pos.y<<" "<<pos.z<<std::endl;
 	p.getB(obj_glob, obj_indx);
 	p.move();
-	pos = p.getPosition();
-	std::cout<<pos.x<<" "<<pos.y<<" "<<pos.z<<std::endl;
 	// while(t<STOP_TIME){
 	// 	p.getB(obj_glob, obj_indx);
 	// 	p.move();

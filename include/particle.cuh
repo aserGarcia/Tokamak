@@ -18,10 +18,10 @@ class Particle{
     private:
         float3 pos; //(x, y, z)
         float3 vel; //(x, y, z)
-        int charge;
-        float dt = 0.001;
+        int charge = 1; //+1e
+        float dt = 1e-12; //picoseconds
         float mu_0 = 1e-7; //mu_0 = (4*PI)e-7 and biot savart divides bu_0 by 4*PI... (Newt/Amps^2)
-
+        float mass = 1.007276; //atomic unit of mass
     public:
         //Default Constructor
         Particle(float3, float3, int c = 1);
