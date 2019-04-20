@@ -10,7 +10,7 @@
 
 #define NR_NEUTRONS 8 
 #define NR_ELECTRONS 8 
-#define NR_PROTONS 8 
+#define NR_PROTONS 8
 
 //atomic mass (u)
 #define MASS_PROTON 1.007276 
@@ -42,7 +42,7 @@
 
 //***********************
 // TODO: 
-//		insert reactor array into GPU (flatten?)
+//		Circle separation init
 //***********************
 
 // Globals
@@ -95,6 +95,7 @@ void set_initial_conditions(){
 		p[i].w = 1.0;
 	}
 	num = 0;
+	/*
 	for(int i=-particles_per_side/2; i<particles_per_side/2; i++){
 		for(int j=-particles_per_side/2; j<particles_per_side/2; j++){
 			for(int k=-particles_per_side/2; k<particles_per_side/2; k++){
@@ -103,11 +104,21 @@ void set_initial_conditions(){
 				p[num].y = position_start + j*initail_seperation;
 				p[num].z = position_start + k*initail_seperation;
 				v[num].x = 0.0;
-				v[num].y = 2.0;
+				v[num].y = 0.0;
 				v[num].z = 0.0;
 				num++;		
 			}
 		}
+	}
+	*/
+	int separation = 360*8/N;
+	for(int i=0;i<N;i++){
+		p[num].x = 3*cos(separation);
+		p[num].y = 3*sin(separation);
+		p[num].z = circle_id;
+		v[num].x = 0.0;
+		v[num].y = 0.0;
+		v[num].z = 0.0;
 	}	
 }
 
@@ -115,7 +126,7 @@ void draw_picture(){
 
 	//glClear(GL_COLOR_BUFFER_BIT);
 	//glClear(GL_DEPTH_BUFFER_BIT);
-	glColor3d(1.0,1.0,1.0);
+	glColor3d(0.6,0.8,1.0);
 	glPointSize(3.0);
 	glBegin(GL_POINTS);
 	for(int i=0; i<N; i++)
@@ -160,8 +171,10 @@ __device__ float3 getBodyBodyForce(float4 p0, float4 p1){
 
 __host__ __device__ float3 getMagForce(float4 p0, float3 v0, float3 dl_tail, float3 dl_head, float I){
 	//dl is the section of wire
-	float3 f, B;
-	float3 dl = {dl_head.x-dl_tail.x, dl_head.y-dl_tail.y, dl_head.z-dl_tail.z};
+	float3 f, B, dl;
+	dl.x = dl_head.x-dl_tail.x;
+	dl.y = dl_head.y-dl_tail.y;
+	dl.z = dl_head.z-dl_tail.z;
 
 	float rx = p0.x-dl_tail.x;
     float ry = p0.y-dl_tail.y;
@@ -183,7 +196,44 @@ __host__ __device__ float3 getMagForce(float4 p0, float3 v0, float3 dl_tail, flo
 	return f;
 }
 
-__global__ void getForces(float4 *g_pos, float3 *g_vel, float3 *force, float3 *reactor, int offset){
+__global__ void getForcesMag(float4 *g_pos, float3 *g_vel, float3 *force, int offset, float3 *reactor){
+	
+	int id = threadIdx.x + blockDim.x*blockIdx.x;
+	float3 forceSum, force_mag, dl_tail, dl_head, velMe;
+	float4 posMe;
+
+	forceSum.x = 0.0;
+	forceSum.y = 0.0;
+	forceSum.z = 0.0;
+
+	posMe.x = g_pos[id+offset].x;
+	posMe.y = g_pos[id+offset].y;
+	posMe.z = g_pos[id+offset].z;
+	posMe.w = g_pos[id+offset].w;
+
+	velMe.x = g_vel[id+offset].x;
+	velMe.y = g_vel[id+offset].y;
+	velMe.z = g_vel[id+offset].z;
+	
+	for(int k=0;k<SHAPE_CT;k++){
+		for(int j = 1; j<=SHAPE_SIZE; j++){
+			dl_tail = reactor[(j-1)+SHAPE_SIZE*k];
+			dl_head = reactor[(j%SHAPE_SIZE)+SHAPE_SIZE*k];
+			force_mag = getMagForce(posMe, velMe, dl_tail, dl_head, 0.01); //current[i] =1
+			forceSum.x += force_mag.x;
+			forceSum.y += force_mag.y;
+			forceSum.z += force_mag.z;
+		}
+	}
+
+	if(id<N){
+		force[id].x = forceSum.x;
+		force[id].y = forceSum.y;
+		force[id].z = forceSum.z;
+	}
+}
+
+__global__ void getForces(float4 *g_pos, float3 *force, int offset){
 	int ii;
     float3 force_b2b, forceSum;
     float4 posMe;
@@ -261,7 +311,7 @@ void n_body(){
 			ERROR_CHECK( cudaMemcpy(p_GPU1, p, N*sizeof(float4), cudaMemcpyHostToDevice) );
 
 			ERROR_CHECK( cudaMalloc(&r_GPU1, SHAPE_CT*SHAPE_SIZE*sizeof(float3)) );
-			ERROR_CHECK( cudaMemcpy(r_GPU0, reactor, SHAPE_CT*SHAPE_SIZE*sizeof(float3), cudaMemcpyHostToDevice) );
+			ERROR_CHECK( cudaMemcpy(r_GPU1, reactor, SHAPE_CT*SHAPE_SIZE*sizeof(float3), cudaMemcpyHostToDevice) );
 		}
 
 		dev[i].deviceID = i;
@@ -296,38 +346,14 @@ void n_body(){
 			float4 *temp;
 			float3 *rtemp;
 			temp = i?p_GPU1:p_GPU0;
-			rtemp = i?r_GPU0:r_GPU1;
+			rtemp = i?r_GPU1:r_GPU0;
 			cudaSetDevice( dev[i].deviceID );
-			getForces<<<grid, block>>>(temp, dev[i].vel, dev[i].force, rtemp, dev[i].offset);
-			
+			getForces<<<grid, block>>>(temp, dev[i].force, dev[i].offset);
 			ERROR_CHECK( cudaPeekAtLastError() );
-			ERROR_CHECK( cudaMemcpy(f+dev[i].offset, dev[i].force,dev[i].size*sizeof(float3), cudaMemcpyDeviceToHost) );
-			ERROR_CHECK( cudaMemcpy(p+dev[i].offset, dev[i].pos, dev[i].size*sizeof(float4), cudaMemcpyDeviceToHost) );
-			ERROR_CHECK( cudaMemcpy(v+dev[i].offset, dev[i].vel, dev[i].size*sizeof(float3), cudaMemcpyDeviceToHost) );
-			for(int me=dev[i].offset; me<(dev[i].size+dev[i].offset);me++){
-				
-				float3 forceSum = make_float3(0.0,0.0,0.0);
-				float3 force_mag;
-				float4 posMe = p[me];
-				float3 velMe = v[me];
-				for(int k=0;k<SHAPE_CT;k++){
-					for(int j = 1; j<=SHAPE_SIZE; j++){
-						float3 dl_tail = reactor[(j-1)+SHAPE_SIZE*k];
-						float3 dl_head = reactor[(j%SHAPE_SIZE)+SHAPE_SIZE*k];
-						
-						force_mag = getMagForce(posMe, velMe, dl_tail, dl_head, 1.0); //current[i] =1
-						forceSum.x += force_mag.x;
-						forceSum.y += force_mag.y;
-						forceSum.z += force_mag.z;
-					}
-				}
-				f[me].x += forceSum.x;
-				f[me].y += forceSum.x;
-				f[me].z += forceSum.z;
-			}
-			ERROR_CHECK( cudaMemcpy(dev[i].vel, v+dev[i].offset, dev[i].size*sizeof(float3), cudaMemcpyHostToDevice) );
-			ERROR_CHECK( cudaMemcpy(dev[i].force, f+dev[i].offset, dev[i].size*sizeof(float3), cudaMemcpyHostToDevice) );
-			
+
+			getForcesMag<<<grid,block>>>(temp, dev[i].vel, dev[i].force,dev[i].offset,rtemp);
+			ERROR_CHECK( cudaPeekAtLastError() );
+
 			moveBodies<<<grid, block>>>(temp, dev[i].pos, dev[i].vel, dev[i].force, dev[i].offset);
 			ERROR_CHECK( cudaPeekAtLastError() );
 		}
@@ -342,7 +368,6 @@ void n_body(){
 		}
 
 		cudaDeviceSynchronize();
-
 
 		//To kill the draw comment out the next 7 lines.
 		if(tdraw == DRAW){
@@ -360,7 +385,6 @@ void n_body(){
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&elapsedTime, start, stop);
 	printf("\n\nGPU time = %3.1f milliseconds\n", elapsedTime);
-
 
 	cudaFree(p_GPU0);
 	cudaFree(p_GPU1);
