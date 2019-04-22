@@ -2,7 +2,7 @@
 // nvcc nBodySimulation.cu -o nBody -lglut -lm -lGLU -lGL; ./nBody
 //To stop hit "control c" in the window you launched it from.
 //Make movies https://gist.github.com/JPEGtheDev/db078e1b066543ce40580060eee9c1bf
-#include <GL/glut.h>
+#include <GL/freeglut.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,14 +87,16 @@ void set_initial_conditions(){
 	float numc = 1.0;
 	int separation = 360*8/N;
 	int nr_circles = N/16;
+	float r = 5.0;
 	for(int num=0;num<N;num++){
-		p[num].x = 5.0*cos(separation*num);
+		p[num].x = r*cos(separation*num);
 		p[num].y = numc;
-		p[num].z = 5.0*sin(separation*num);
+		p[num].z = r*sin(separation*num);
 		p[num].w = 1.0;
-		v[num].x = 10.0;
+
+		v[num].x = -1.5*p[num].x;
 		v[num].y = 0.0;
-		v[num].z = -10.0;
+		v[num].z = 1.5*sqrtf(r*r-p[num].x*p[num].x);
 		if(num%nr_circles==0){
 			numc += 0.2;
 		}
@@ -120,8 +122,8 @@ void draw_axes(){
 
 void draw_picture(){
 
-	//glClear(GL_COLOR_BUFFER_BIT);
-	//glClear(GL_DEPTH_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glClear(GL_DEPTH_BUFFER_BIT);
 	glColor3d(0.6,0.8,1.0);
 	glPointSize(3.0);
 	glBegin(GL_POINTS);
@@ -342,8 +344,8 @@ void n_body(){
 	cudaEventRecord(start, 0);
 	
 	dt = DT;
-    
-	while(time < STOP_TIME){	
+	bool run = true;
+	while(time < STOP_TIME && run){	
 		for(int i = 0; i < deviceCount; i++){
 			float4 *temp;
 			float3 *rtemp;
@@ -378,6 +380,14 @@ void n_body(){
 			}
 			draw_obj();
 			draw_picture();
+
+			//break the for loop by closing window
+			glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+			glutMainLoopEvent();
+			if(!glutGetWindow()){
+				run = false;
+			}
+
 			tdraw = 0;
 		}
 		tdraw++;
@@ -464,6 +474,6 @@ int main(int argc, char** argv){
 	glEnable(GL_DEPTH_TEST);
 	glutDisplayFunc(Display);
 	glutReshapeFunc(reshape);
-	glutMainLoop();
+	glutMainLoopEvent();
 	return 0;
 }
