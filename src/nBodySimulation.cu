@@ -40,7 +40,6 @@
 #define PATH "./objects/Tokamak_256.obj" //256 vertices-shape (for array simplicity)
 #define N 16*16*16
 
-
 //***********************
 // TODO: 
 //		We need to set some
@@ -140,7 +139,7 @@ void draw_obj(){
 	//glClear(GL_COLOR_BUFFER_BIT);
 	//glClear(GL_DEPTH_BUFFER_BIT);
 	glColor3d(1.0,0.0,0.0);
-	glPointSize(10.0);
+	glPointSize(5.0);
 	glBegin(GL_POINTS);
 	for(int i=0; i<SHAPE_SIZE*SHAPE_CT; i++)
 	{
@@ -344,8 +343,7 @@ void n_body(){
 	cudaEventRecord(start, 0);
 	
 	dt = DT;
-	bool run = true;
-	while(time < STOP_TIME && run){	
+	while(time < STOP_TIME){	
 		for(int i = 0; i < deviceCount; i++){
 			float4 *temp;
 			float3 *rtemp;
@@ -384,9 +382,7 @@ void n_body(){
 			//break the for loop by closing window
 			glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
 			glutMainLoopEvent();
-			if(!glutGetWindow()){
-				run = false;
-			}
+			if(!glutGetWindow()){ break; }
 
 			tdraw = 0;
 		}
@@ -417,8 +413,6 @@ void n_body(){
 	free(f);
 	free(reactor);
 }
-
-
 
 void control(){	
 	read_obj();
@@ -452,8 +446,8 @@ int main(int argc, char** argv){
 	glutInitWindowPosition(0,0);
 	glutCreateWindow("2 Body 3D");
 	GLfloat light_position[] = {1.0, 1.0, 1.0, 0.0};
-	GLfloat light_ambient[]  = {0.0, 0.0, 0.0, 1.0};
-	GLfloat light_diffuse[]  = {1.0, 1.0, 1.0, 1.0};
+	GLfloat light_ambient[]  = {0.2, 0.2, 0.2, 1.0};
+	GLfloat light_diffuse[]  = {0.8, 0.8, 0.8, 1.0};
 	GLfloat light_specular[] = {1.0, 1.0, 1.0, 1.0};
 	GLfloat lmodel_ambient[] = {0.2, 0.2, 0.2, 1.0};
 	GLfloat mat_specular[]   = {1.0, 1.0, 1.0, 1.0};
