@@ -92,10 +92,14 @@ void set_initial_conditions(){
 		p[num].y = numc;
 		p[num].z = r*sin(separation*num);
 		p[num].w = 1.0;
-
-		v[num].x = -1.5*p[num].x;
+		
+		v[num].x = 1.5*p[num].x;
 		v[num].y = 0.0;
-		v[num].z = 1.5*sqrtf(r*r-p[num].x*p[num].x);
+		v[num].z = -1.5*sqrtf(r*r-p[num].x*p[num].x);
+		/*
+		v[num].x = 2.0;
+		v[num].y = 0.0;
+		v[num].z = 2.0;*/
 		if(num%nr_circles==0){
 			numc += 0.2;
 		}
@@ -131,13 +135,7 @@ void draw_picture(){
 		glVertex3f(p[i].x, p[i].y, p[i].z);
 	}
 	glEnd();
-	glutSwapBuffers();
-}
-
-void draw_obj(){
-
-	//glClear(GL_COLOR_BUFFER_BIT);
-	//glClear(GL_DEPTH_BUFFER_BIT);
+	//drawing obj
 	glColor3d(1.0,0.0,0.0);
 	glPointSize(5.0);
 	glBegin(GL_POINTS);
@@ -146,6 +144,7 @@ void draw_obj(){
 		glVertex3f(reactor[i].x, reactor[i].y, reactor[i].z);
 	}
 	glEnd();
+
 	glutSwapBuffers();
 }
 
@@ -376,9 +375,8 @@ void n_body(){
 			cudaSetDevice(i);
 			ERROR_CHECK( cudaMemcpy(p+dev[i].offset, dev[i].pos, dev[i].size*sizeof(float4), cudaMemcpyDeviceToHost) );
 			}
-			draw_obj();
+			
 			draw_picture();
-
 			//break the for loop by closing window
 			glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
 			glutMainLoopEvent();
@@ -417,11 +415,8 @@ void n_body(){
 void control(){	
 	read_obj();
 	set_initial_conditions();
-	draw_obj();
 	draw_picture();
-	draw_axes();
     n_body();
-	
 	printf("\n DONE \n");
 }
 
