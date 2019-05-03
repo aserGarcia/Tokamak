@@ -29,11 +29,11 @@
 #define DT 0.001
 #define STOP_TIME 10.0
 
-#define G 1.0
+#define G 6.67408E-11
 #define H 1.0
 
-#define EYE 10.0
-#define FAR 90.0
+#define EYE 8.5
+#define FAR 80.0
 
 #define SHAPE_CT 24
 #define SHAPE_SIZE 256
@@ -42,8 +42,8 @@
 
 //***********************
 // TODO: 
-//		We need to set some
-//		boundaties ಠ_ಠ
+//		Check units velocity calculation mag
+//		ಠ_ಠ
 //***********************
 
 // Globals
@@ -93,13 +93,14 @@ void set_initial_conditions(){
 		p[num].z = r*sin(separation*num);
 		p[num].w = 1.0;
 		
-		v[num].x = 1.5*p[num].x;
+		v[num].x = -1.5*p[num].x;
 		v[num].y = 0.0;
-		v[num].z = -1.5*sqrtf(r*r-p[num].x*p[num].x);
-		/*
-		v[num].x = 2.0;
-		v[num].y = 0.0;
-		v[num].z = 2.0;*/
+		v[num].z = 1.5*sqrtf(r*r-p[num].x*p[num].x);
+
+		f[num].x = 0.0;
+		f[num].y = 0.0;
+		f[num].z = 0.0;
+		
 		if(num%nr_circles==0){
 			numc += 0.2;
 		}
@@ -136,6 +137,7 @@ void draw_picture(){
 	}
 	glEnd();
 	//drawing obj
+	
 	glColor3d(1.0,0.0,0.0);
 	glPointSize(5.0);
 	glBegin(GL_POINTS);
@@ -144,7 +146,6 @@ void draw_picture(){
 		glVertex3f(reactor[i].x, reactor[i].y, reactor[i].z);
 	}
 	glEnd();
-
 	glutSwapBuffers();
 }
 
@@ -156,7 +157,7 @@ __device__ float3 getBodyBodyForce(float4 p0, float4 p1){
     float r2 = dx*dx + dy*dy + dz*dz;
 	float r = sqrt(r2);
 	
-    float force  = (G*p0.w*p1.w)/(r2) - (H*p0.w*p1.w)/(r2*r2);
+    float force  = (G*p0.w*p1.w)/(r2);// - (H*p0.w*p1.w)/(r2*r2);
     
     f.x = force*dx/r;
     f.y = force*dy/r;
@@ -167,7 +168,7 @@ __device__ float3 getBodyBodyForce(float4 p0, float4 p1){
 
 __device__ float3 getMagForce(float4 p0, float3 v0, float3 dl_tail, float3 dl_head, float I){
 	//dl is the section of wire
-	float3 f, B, dl;
+	float3 dB, dl;
 	dl.x = dl_head.x-dl_tail.x;
 	dl.y = dl_head.y-dl_tail.y;
 	dl.z = dl_head.z-dl_tail.z;
@@ -181,27 +182,25 @@ __device__ float3 getMagForce(float4 p0, float3 v0, float3 dl_tail, float3 dl_he
 	float3 rhat = {rx/r, ry/r, rz/r};
 
 	//(dl cross rhat)/r2 = force
-	B.x = (dl.y*rhat.z-dl.z*rhat.y)/r2;
-	B.y = (dl.z*rhat.x-dl.x*rhat.z)/r2;
-	B.z = (dl.x*rhat.y-dl.y*rhat.x)/r2;
+	//gamma is mu0*I/4Pi which simplifies to Ie-7
+	float gamma = I;
+	dB.x = gamma*(dl.y*rhat.z-dl.z*rhat.y)/r2;
+	dB.y = gamma*(dl.z*rhat.x-dl.x*rhat.z)/r2;
+	dB.z = gamma*(dl.x*rhat.y-dl.y*rhat.x)/r2;
 
-	f.x = (v0.y*B.z-v0.z*B.y);
-	f.y = (v0.z*B.x-v0.x*B.z);
-	f.z = (v0.x*B.y-v0.y*B.x);
-
-	return (f);
+	return (dB);
 }
 
 __global__ void getForcesMag(float4 *g_pos, float3 *g_vel, float3 *force, int offset, float3 *g_reactor){
 	
 	int id = threadIdx.x + blockDim.x*blockIdx.x;
-	float3 forceSum, force_mag, dl_tail, dl_head, velMe;
+	float3 total_force, B, dB, dl_tail, dl_head, velMe;
 	float4 posMe;
 	__shared__ float3 shared_r[BLOCK];
 
-	forceSum.x = 0.0;
-	forceSum.y = 0.0;
-	forceSum.z = 0.0;
+	total_force.x = B.x = 0.0;
+	total_force.y = B.y = 0.0;
+	total_force.z = B.z = 0.0;
 
 	posMe.x = g_pos[id+offset].x;
 	posMe.y = g_pos[id+offset].y;
@@ -219,19 +218,22 @@ __global__ void getForcesMag(float4 *g_pos, float3 *g_vel, float3 *force, int of
 		for(int j = 1; j<=SHAPE_SIZE; j++){
 			dl_tail = shared_r[(j-1)];
 			dl_head = shared_r[(j%SHAPE_SIZE)];
-			force_mag = getMagForce(posMe, velMe, dl_tail, dl_head, 20.0); //current[i] =1
+			dB = getMagForce(posMe, velMe, dl_tail, dl_head, 1.5); //current[i] =1
 			
-			forceSum.x += force_mag.x;
-			forceSum.y += force_mag.y;
-			forceSum.z += force_mag.z;
+			B.x += dB.x;
+			B.y += dB.y;
+			B.z += dB.z;
 		}
 	}
 
+	total_force.x = (velMe.y*B.z-velMe.z*B.y);
+	total_force.y = (velMe.z*B.x-velMe.x*B.z);
+	total_force.z = (velMe.x*B.y-velMe.y*B.x);
+
 	if(id<N){
-		
-		force[id].x = forceSum.x;
-		force[id].y = forceSum.y;
-		force[id].z = forceSum.z;
+		force[id].x += total_force.x;
+		force[id].y += total_force.y;
+		force[id].z += total_force.z;
 	}
 }
 
@@ -375,7 +377,7 @@ void n_body(){
 			cudaSetDevice(i);
 			ERROR_CHECK( cudaMemcpy(p+dev[i].offset, dev[i].pos, dev[i].size*sizeof(float4), cudaMemcpyDeviceToHost) );
 			}
-			
+
 			draw_picture();
 			//break the for loop by closing window
 			glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
@@ -391,8 +393,9 @@ void n_body(){
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&elapsedTime, start, stop);
-	printf("\n\nGPU time = %3.1f milliseconds\n", elapsedTime);
+	printf("\n\nGPU time = %3.1f seconds\n", elapsedTime/1000.0);
 
+	cudaSetDevice(0);
 	cudaFree(p_GPU0);
 	cudaFree(r_GPU0);
 	cudaFree(dev[0].pos);
@@ -400,6 +403,7 @@ void n_body(){
 	cudaFree(dev[0].force);
 
 	if(deviceCount>1){
+		//cudaSetDevice(1);
 		cudaFree(p_GPU1);
 		cudaFree(r_GPU1);
 		cudaFree(dev[1].pos);
@@ -415,6 +419,14 @@ void n_body(){
 void control(){	
 	read_obj();
 	set_initial_conditions();
+	glColor3d(1.0,0.0,0.0);
+	glPointSize(5.0);
+	glBegin(GL_POINTS);
+	for(int i=0; i<SHAPE_SIZE*SHAPE_CT; i++)
+	{
+		glVertex3f(reactor[i].x, reactor[i].y, reactor[i].z);
+	}
+	glEnd();
 	draw_picture();
     n_body();
 	printf("\n DONE \n");
