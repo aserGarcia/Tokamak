@@ -6,6 +6,9 @@ experiencing fusion. In turn heat is released and can be used to create steam to
 
 ![Tokamak Diagram](/assets/tokamak.jpg "Tokamak Diagram")
 
+The current simulation is shown below.
+![Alt Text](/assets/noTraceNoCollision.gif)
+
 ## Language
 The main language in this project is Cuda to take advantage of it's parallel programming capabilities.
 
