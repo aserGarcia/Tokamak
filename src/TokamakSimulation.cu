@@ -156,7 +156,9 @@ __device__ float3 getBodyBodyForce(float4 p0, float4 p1){
     float dz = p1.z - p0.z;
     float r2 = dx*dx + dy*dy + dz*dz;
 	float r = sqrt(r2);
-	
+	if(r2<0.001){
+		return make_float3(0.0,0.0,0.0);
+	}
     float force  = (G*p0.w*p1.w)/(r2);// - (H*p0.w*p1.w)/(r2*r2);
     
     f.x = force*dx/r;
@@ -180,6 +182,9 @@ __device__ float3 getMagForce(float4 p0, float3 v0, float3 dl_tail, float3 dl_he
 	float r2 = rx*rx+ry*ry+rz*rz;
 	float r = sqrtf(r2);
 	float3 rhat = {rx/r, ry/r, rz/r};
+	if(r2<0.001){
+		return make_float3(0.0,0.0,0.0);
+	}
 
 	//(dl cross rhat)/r2 = force
 	//gamma is mu0*I/4Pi which simplifies to Ie-7
@@ -218,7 +223,7 @@ __global__ void getForcesMag(float4 *g_pos, float3 *g_vel, float3 *force, int of
 		for(int j = 1; j<=SHAPE_SIZE; j++){
 			dl_tail = shared_r[(j-1)];
 			dl_head = shared_r[(j%SHAPE_SIZE)];
-			dB = getMagForce(posMe, velMe, dl_tail, dl_head, 1.5); //current[i] =1
+			dB = getMagForce(posMe, velMe, dl_tail, dl_head, 1.0); //current[i] =1
 			
 			B.x += dB.x;
 			B.y += dB.y;
