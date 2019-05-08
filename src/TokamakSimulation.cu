@@ -212,9 +212,9 @@ __global__ void getForcesMag(float4 *g_pos, float3 *g_vel, float3 *force, int of
 	posMe.z = g_pos[id+offset].z;
 	posMe.w = g_pos[id+offset].w;
 
-	velMe.x = g_vel[id+offset].x;
-	velMe.y = g_vel[id+offset].y;
-	velMe.z = g_vel[id+offset].z;
+	velMe.x = g_vel[id].x;
+	velMe.y = g_vel[id].y;
+	velMe.z = g_vel[id].z;
 	
 	for(int k=0;k<SHAPE_CT;k++){
 		shared_r[threadIdx.x] = g_reactor[threadIdx.x + blockDim.x*k];
@@ -294,7 +294,7 @@ __global__ void moveBodies(float4 *g_pos, float4 *d_pos, float3 *vel, float3 * f
 		d_pos[id].x += vel[id].x*DT;
 	    d_pos[id].y += vel[id].y*DT;
 		d_pos[id].z += vel[id].z*DT;
-		
+
 		g_pos[id+offset].x = d_pos[id].x;
 		g_pos[id+offset].y = d_pos[id].y;
 		g_pos[id+offset].z = d_pos[id].z;
@@ -366,23 +366,23 @@ void n_body(){
 			ERROR_CHECK( cudaPeekAtLastError() );
 		}
 
+		cudaDeviceSynchronize();
+
 		if(deviceCount > 1){
 			//cudaDeviceSynchronize();
 			cudaSetDevice( 0 );
-			ERROR_CHECK( cudaMemcpy(p_GPU0+dev[0].offset, dev[0].pos, dev[1].size*sizeof(float4), cudaMemcpyDeviceToDevice) );
+			ERROR_CHECK( cudaMemcpy(p_GPU1+dev[0].offset, dev[0].pos, dev[1].size*sizeof(float4), cudaMemcpyDeviceToDevice) );
 			cudaSetDevice( 1 );
-			ERROR_CHECK( cudaMemcpy(p_GPU1+dev[1].offset, dev[1].pos, dev[0].size*sizeof(float4), cudaMemcpyDeviceToDevice) );
+			ERROR_CHECK( cudaMemcpy(p_GPU0+dev[1].offset, dev[1].pos, dev[0].size*sizeof(float4), cudaMemcpyDeviceToDevice) );
 			//cudaDeviceSynchronize();
 		}
+		cudaDeviceSynchronize();
 
 		//To kill the draw comment out the next 7 lines.
 		if(tdraw == DRAW){
-			cudaDeviceSynchronize();
-			for(int i=0;i<deviceCount;i++){
-			cudaSetDevice(i);
-			ERROR_CHECK( cudaMemcpy(p+dev[i].offset, dev[i].pos, dev[i].size*sizeof(float4), cudaMemcpyDeviceToHost) );
-			}
-
+			//cudaDeviceSynchronize();
+			cudaSetDevice(0);
+			ERROR_CHECK( cudaMemcpy(p, p_GPU0, N * sizeof(float4), cudaMemcpyDeviceToHost) );
 			draw_picture();
 			//break the for loop by closing window
 			glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
@@ -408,7 +408,7 @@ void n_body(){
 	cudaFree(dev[0].force);
 
 	if(deviceCount>1){
-		//cudaSetDevice(1);
+		cudaSetDevice(1);
 		cudaFree(p_GPU1);
 		cudaFree(r_GPU1);
 		cudaFree(dev[1].pos);
