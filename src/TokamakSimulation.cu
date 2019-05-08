@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <cuda.h>
-#include "../cudaErrCheck.cuh"
+#include "../includes/cudaErrCheck.cuh"
 
 #define NR_NEUTRONS 8 
 #define NR_ELECTRONS 8 
