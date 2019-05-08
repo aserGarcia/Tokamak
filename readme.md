@@ -23,11 +23,11 @@ git clone https://github.com/aserGarcia/Tokamak.git
 Ensure that you have [OpenGL](http://www.prinmath.com/csci5229/misc/install.html) installed and properly set up. The link takes to a page with proper instructions.
 
 ### Instructions
-To compile the source code, run the Makefile in the root directory
+To compile the source code, enter the command below
 ```
-make -f Makefile
+nvcc TokamakSimulation.cu -o reactorRun -lglut -lm -lGLU -lGL
 ```
-It will make an executable 'output' ; run as below
+It will make an executable 'reactorRun' ; run as below
 ```
-./output
+./reactorRun
 ```
