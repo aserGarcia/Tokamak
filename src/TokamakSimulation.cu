@@ -1,5 +1,6 @@
 // Optimized using shared memory and on chip memory
-// nvcc nBodySimulation.cu -o nBody -lglut -lm -lGLU -lGL; ./nBody
+// Compile source: $- nvcc TokamakSimulation.cu -o nBody -lglut -lm -lGLU -lGL
+// Run Executable: $- ./nBody
 //To stop hit "control c" in the window you launched it from.
 //Make movies https://gist.github.com/JPEGtheDev/db078e1b066543ce40580060eee9c1bf
 #include <GL/freeglut.h>
