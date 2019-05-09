@@ -1,5 +1,5 @@
 // Optimized using shared memory and on chip memory
-// Compile source: $- nvcc TokamakSimulation.cu -o nBody -lglut -lm -lGLU -lGL
+// Compile source: $- nvcc src/TokamakSimulation.cu -o nBody -lglut -lm -lGLU -lGL
 // Run Executable: $- ./nBody
 //To stop hit "control c" in the window you launched it from.
 //Make movies https://gist.github.com/JPEGtheDev/db078e1b066543ce40580060eee9c1bf
@@ -49,24 +49,19 @@
 
 // Globals
 float4 *p;
-float3 *v, *f, *reactor,*r_GPU0, *r_GPU1;
-float4 *p_GPU0, *p_GPU1;
+float3 *v, *f, *reactor;
 
 //DeviceStruct stores GPU(s) info//
 struct DeviceStruct {
 	int deviceID;
-	int size;
 	int offset;
-	float4 *pos;
-	float3 *vel;
-	float3 *force;
 };
 
 void read_obj(){
 	FILE *fp = fopen(PATH, "r");
 	char c, line[256];
 	memset(line, 0, 256);
-	reactor = (float3*)malloc(SHAPE_CT*SHAPE_SIZE*sizeof(float3));
+	ERROR_CHECK( cudaMallocManaged(&reactor, SHAPE_SIZE*SHAPE_CT*sizeof(float3)) );
 
     int j =0;
     while(fgets(line, sizeof(line), fp) != 0){
@@ -80,9 +75,10 @@ void read_obj(){
 }
 
 void set_initial_conditions(){
-	p = (float4*)malloc(N*sizeof(float4));
-	v = (float3*)malloc(N*sizeof(float3));
-	f = (float3*)malloc(N*sizeof(float3));
+
+	ERROR_CHECK( cudaMallocManaged(&p, N*sizeof(float4)) );
+	ERROR_CHECK( cudaMallocManaged(&v, N*sizeof(float3)) );
+	ERROR_CHECK( cudaMallocManaged(&f, N*sizeof(float3)) );
 
 	float numc = 1.0;
 	int separation = 360*8/N;
@@ -92,7 +88,7 @@ void set_initial_conditions(){
 		p[num].x = r*cos(separation*num);
 		p[num].y = numc;
 		p[num].z = r*sin(separation*num);
-		p[num].w = 1.0;
+		p[num].w = MASS_PROTON;
 		
 		v[num].x = -1.5*p[num].x;
 		v[num].y = 0.0;
@@ -108,22 +104,6 @@ void set_initial_conditions(){
 	}
 }
 
-void draw_axes(){
-	glBegin(GL_LINES);
-		glColor3d(1.0,0.0,0.0);
-		glVertex3f(0,0,0);
-		glVertex3f(1,0,0);
-		
-		glColor3d(0.0,1.0,0.0);
-		glVertex3f(0,0,0);
-		glVertex3f(0,1,0);
-
-		glColor3d(0.0,0.0,1.0);
-		glVertex3f(0,0,0);
-		glVertex3f(0,0,1);
-	glEnd();
-	glutSwapBuffers();
-}
 
 void draw_picture(){
 
@@ -137,8 +117,8 @@ void draw_picture(){
 		glVertex3f(p[i].x, p[i].y, p[i].z);
 	}
 	glEnd();
-	//drawing obj
 	
+	//drawing ractor
 	glColor3d(1.0,0.0,0.0);
 	glPointSize(5.0);
 	glBegin(GL_POINTS);
@@ -156,15 +136,13 @@ __device__ float3 getBodyBodyForce(float4 p0, float4 p1){
     float dy = p1.y - p0.y;
     float dz = p1.z - p0.z;
     float r2 = dx*dx + dy*dy + dz*dz;
-	float r = sqrt(r2);
-	if(r2<0.001){
-		return make_float3(0.0,0.0,0.0);
-	}
+	float inv_r = 1/sqrt(r2);
+	
     float force  = (G*p0.w*p1.w)/(r2);// - (H*p0.w*p1.w)/(r2*r2);
     
-    f.x = force*dx/r;
-    f.y = force*dy/r;
-    f.z = force*dz/r;
+    f.x = force*dx*inv_r;
+    f.y = force*dy*inv_r;
+    f.z = force*dz*inv_r;
     
     return(f);
 }
@@ -181,23 +159,21 @@ __device__ float3 getMagForce(float4 p0, float3 v0, float3 dl_tail, float3 dl_he
 	float rz = p0.z-dl_tail.z;
 
 	float r2 = rx*rx+ry*ry+rz*rz;
-	float r = sqrtf(r2);
-	float3 rhat = {rx/r, ry/r, rz/r};
-	if(r2<0.001){
-		return make_float3(0.0,0.0,0.0);
-	}
+	float inv_r2 = 1/r2;
+	float inv_r = 1/sqrtf(r2);
+	float3 rhat = {rx*inv_r, ry*inv_r, rz*inv_r};
 
 	//(dl cross rhat)/r2 = force
 	//gamma is mu0*I/4Pi which simplifies to Ie-7
 	float gamma = I;
-	dB.x = gamma*(dl.y*rhat.z-dl.z*rhat.y)/r2;
-	dB.y = gamma*(dl.z*rhat.x-dl.x*rhat.z)/r2;
-	dB.z = gamma*(dl.x*rhat.y-dl.y*rhat.x)/r2;
+	dB.x = gamma*(dl.y*rhat.z-dl.z*rhat.y)*inv_r2;
+	dB.y = gamma*(dl.z*rhat.x-dl.x*rhat.z)*inv_r2;
+	dB.z = gamma*(dl.x*rhat.y-dl.y*rhat.x)*inv_r2;
 
 	return (dB);
 }
 
-__global__ void getForcesMag(float4 *g_pos, float3 *g_vel, float3 *force, int offset, float3 *g_reactor){
+__global__ void getForcesMag(float4 *pos, float3 *vel, float3 *force, float3 *reactor, int offset){
 	
 	int id = threadIdx.x + blockDim.x*blockIdx.x;
 	float3 total_force, B, dB, dl_tail, dl_head, velMe;
@@ -208,17 +184,17 @@ __global__ void getForcesMag(float4 *g_pos, float3 *g_vel, float3 *force, int of
 	total_force.y = B.y = 0.0;
 	total_force.z = B.z = 0.0;
 
-	posMe.x = g_pos[id+offset].x;
-	posMe.y = g_pos[id+offset].y;
-	posMe.z = g_pos[id+offset].z;
-	posMe.w = g_pos[id+offset].w;
+	posMe.x = pos[id+offset].x;
+	posMe.y = pos[id+offset].y;
+	posMe.z = pos[id+offset].z;
+	posMe.w = pos[id+offset].w;
 
-	velMe.x = g_vel[id].x;
-	velMe.y = g_vel[id].y;
-	velMe.z = g_vel[id].z;
+	velMe.x = vel[id+offset].x;
+	velMe.y = vel[id+offset].y;
+	velMe.z = vel[id+offset].z;
 	
 	for(int k=0;k<SHAPE_CT;k++){
-		shared_r[threadIdx.x] = g_reactor[threadIdx.x + blockDim.x*k];
+		shared_r[threadIdx.x] = reactor[threadIdx.x + blockDim.x*k];
 		__syncthreads();
 		
 		for(int j = 1; j<=SHAPE_SIZE; j++){
@@ -237,9 +213,9 @@ __global__ void getForcesMag(float4 *g_pos, float3 *g_vel, float3 *force, int of
 	total_force.z = (velMe.x*B.y-velMe.y*B.x);
 
 	if(id<N){
-		force[id].x += total_force.x;
-		force[id].y += total_force.y;
-		force[id].z += total_force.z;
+		force[id+offset].x += total_force.x;
+		force[id+offset].y += total_force.y;
+		force[id+offset].z += total_force.z;
 	}
 }
 
@@ -279,26 +255,23 @@ __global__ void getForces(float4 *g_pos, float3 *force, int offset, int device_c
 	}
 
 	if(id <N){
-	    force[id].x = forceSum.x;
-	    force[id].y = forceSum.y;
-	    force[id].z = forceSum.z;
+	    force[id+offset].x = forceSum.x;
+	    force[id+offset].y = forceSum.y;
+	    force[id+offset].z = forceSum.z;
     }
 }
 
-__global__ void moveBodies(float4 *g_pos, float4 *d_pos, float3 *vel, float3 * force, int offset){
+__global__ void moveBodies(float4 *pos, float3 *vel, float3 *force, int offset){
     int id = threadIdx.x + blockDim.x*blockIdx.x;
     if(id < N){
-	    vel[id].x += ((force[id].x-DAMP*vel[id].x)/d_pos[id].w)*DT;
-	    vel[id].y += ((force[id].y-DAMP*vel[id].y)/d_pos[id].w)*DT;
-	    vel[id].z += ((force[id].z-DAMP*vel[id].z)/d_pos[id].w)*DT;
-
-		d_pos[id].x += vel[id].x*DT;
-	    d_pos[id].y += vel[id].y*DT;
-		d_pos[id].z += vel[id].z*DT;
-
-		g_pos[id+offset].x = d_pos[id].x;
-		g_pos[id+offset].y = d_pos[id].y;
-		g_pos[id+offset].z = d_pos[id].z;
+		float inv_mass = 1/pos[id+offset].w;
+	    vel[id+offset].x += ((force[id+offset].x-DAMP*vel[id+offset].x)*inv_mass)*DT;
+	    vel[id+offset].y += ((force[id+offset].y-DAMP*vel[id+offset].y)*inv_mass)*DT;
+		vel[id+offset].z += ((force[id+offset].z-DAMP*vel[id+offset].z)*inv_mass)*DT;
+		
+		pos[id+offset].x += vel[id+offset].x*DT;
+		pos[id+offset].y += vel[id+offset].y*DT;
+		pos[id+offset].z += vel[id+offset].z*DT;
     }
 }
 
@@ -308,32 +281,8 @@ void n_body(){
 	DeviceStruct* dev = (DeviceStruct*)malloc(deviceCount*sizeof(DeviceStruct));
 	
 	for(int i = 0; i<deviceCount; i++){
-		cudaSetDevice(i);
-		if(i==0){
-			ERROR_CHECK( cudaMalloc(&p_GPU0, N*sizeof(float4)) );
-			ERROR_CHECK( cudaMemcpy(p_GPU0, p, N*sizeof(float4), cudaMemcpyHostToDevice) );
-			
-			ERROR_CHECK( cudaMalloc(&r_GPU0, SHAPE_CT*SHAPE_SIZE*sizeof(float3)) );
-			ERROR_CHECK( cudaMemcpy(r_GPU0, reactor, SHAPE_CT*SHAPE_SIZE*sizeof(float3), cudaMemcpyHostToDevice) );
-		}
-		if(i==1){
-			ERROR_CHECK( cudaMalloc(&p_GPU1, N*sizeof(float4)) );
-			ERROR_CHECK( cudaMemcpy(p_GPU1, p, N*sizeof(float4), cudaMemcpyHostToDevice) );
-
-			ERROR_CHECK( cudaMalloc(&r_GPU1, SHAPE_CT*SHAPE_SIZE*sizeof(float3)) );
-			ERROR_CHECK( cudaMemcpy(r_GPU1, reactor, SHAPE_CT*SHAPE_SIZE*sizeof(float3), cudaMemcpyHostToDevice) );
-		}
-
 		dev[i].deviceID = i;
-		dev[i].size = N/deviceCount;
 		dev[i].offset = i*N/deviceCount;
-		ERROR_CHECK( cudaMalloc(&dev[i].pos, dev[i].size*sizeof(float4)) );
-		ERROR_CHECK( cudaMalloc(&dev[i].vel, dev[i].size*sizeof(float3)) );
-		ERROR_CHECK( cudaMalloc(&dev[i].force, dev[i].size*sizeof(float3)) );
-		
-		ERROR_CHECK( cudaMemcpy(dev[i].pos, p+dev[i].offset, dev[i].size*sizeof(float4), cudaMemcpyHostToDevice) );
-		ERROR_CHECK( cudaMemcpy(dev[i].vel, v+dev[i].offset, dev[i].size*sizeof(float3), cudaMemcpyHostToDevice) );
-		ERROR_CHECK( cudaMemcpy(dev[i].force, f+dev[i].offset, dev[i].size*sizeof(float3), cudaMemcpyHostToDevice) );
 	}
 
 	dim3 block(BLOCK);
@@ -352,44 +301,24 @@ void n_body(){
 	dt = DT;
 	while(time < STOP_TIME){	
 		for(int i = 0; i < deviceCount; i++){
-			float4 *temp;
-			float3 *rtemp;
-			temp = i?p_GPU1:p_GPU0;
-			rtemp = i?r_GPU1:r_GPU0;
-			cudaSetDevice( i );
-			getForces<<<grid, block>>>(temp, dev[i].force, dev[i].offset, deviceCount);
+			getForces<<<grid, block>>>(p, f, dev[i].offset, deviceCount);
 			ERROR_CHECK( cudaPeekAtLastError() );
 
-			getForcesMag<<<grid,block>>>(temp, dev[i].vel, dev[i].force,dev[i].offset,rtemp);
+			getForcesMag<<<grid,block>>>(p, v, f, reactor, dev[i].offset);
 			ERROR_CHECK( cudaPeekAtLastError() );
 
-			moveBodies<<<grid, block>>>(temp, dev[i].pos, dev[i].vel, dev[i].force, dev[i].offset);
+			moveBodies<<<grid, block>>>(p, v, f, dev[i].offset);
 			ERROR_CHECK( cudaPeekAtLastError() );
+			cudaDeviceSynchronize();
 		}
-
-		cudaDeviceSynchronize();
-
-		if(deviceCount > 1){
-			//cudaDeviceSynchronize();
-			cudaSetDevice( 0 );
-			ERROR_CHECK( cudaMemcpy(p_GPU1+dev[0].offset, dev[0].pos, dev[1].size*sizeof(float4), cudaMemcpyDeviceToDevice) );
-			cudaSetDevice( 1 );
-			ERROR_CHECK( cudaMemcpy(p_GPU0+dev[1].offset, dev[1].pos, dev[0].size*sizeof(float4), cudaMemcpyDeviceToDevice) );
-			//cudaDeviceSynchronize();
-		}
-		cudaDeviceSynchronize();
 
 		//To kill the draw comment out the next 7 lines.
 		if(tdraw == DRAW){
-			//cudaDeviceSynchronize();
-			cudaSetDevice(0);
-			ERROR_CHECK( cudaMemcpy(p, p_GPU0, N * sizeof(float4), cudaMemcpyDeviceToHost) );
 			draw_picture();
 			//break the for loop by closing window
 			glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
 			glutMainLoopEvent();
 			if(!glutGetWindow()){ break; }
-
 			tdraw = 0;
 		}
 		tdraw++;
@@ -401,38 +330,16 @@ void n_body(){
 	cudaEventElapsedTime(&elapsedTime, start, stop);
 	printf("\n\nGPU time = %3.1f seconds\n", elapsedTime/1000.0);
 
-	cudaSetDevice(0);
-	cudaFree(p_GPU0);
-	cudaFree(r_GPU0);
-	cudaFree(dev[0].pos);
-	cudaFree(dev[0].vel);
-	cudaFree(dev[0].force);
-
-	if(deviceCount>1){
-		cudaSetDevice(1);
-		cudaFree(p_GPU1);
-		cudaFree(r_GPU1);
-		cudaFree(dev[1].pos);
-		cudaFree(dev[1].vel);
-		cudaFree(dev[1].force);
-	}
-	free(p);
-	free(v);
-	free(f);
-	free(reactor);
+	cudaDeviceSynchronize();
+	cudaFree(p);
+	cudaFree(v);
+	cudaFree(f);
+	cudaFree(reactor);
 }
 
 void control(){	
 	read_obj();
 	set_initial_conditions();
-	glColor3d(1.0,0.0,0.0);
-	glPointSize(5.0);
-	glBegin(GL_POINTS);
-	for(int i=0; i<SHAPE_SIZE*SHAPE_CT; i++)
-	{
-		glVertex3f(reactor[i].x, reactor[i].y, reactor[i].z);
-	}
-	glEnd();
 	draw_picture();
     n_body();
 	printf("\n DONE \n");
